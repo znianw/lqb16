@@ -1,0 +1,1 @@
+"device\src\ds18b20.c" OPTIMIZE (8,SPEED) BROWSE INCDIR(.\driver\inc;.\device\inc) DEBUG OBJECTEXTEND PRINT(.\Listings\ds18b20.lst) OBJECT(.\Objects\ds18b20.obj)

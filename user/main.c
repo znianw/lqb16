@@ -7,19 +7,24 @@
 #include "led.h"
 #include "relay.h"
 #include "timer.h"
+#include "delay.h"
+#include "utralsound.h"
 
 unsigned char smgpos_index = 0;
 unsigned int sys_ticks = 0;
 
-unsigned char show_mode = 0;   /*0 env_state 1 sport_state 2 temprg_state  3 nc_state  */
+unsigned char show_mode = 0;   /*0 env_state 1 sport_state 2 temprg_state  3 nc_state  10 距离参数*/
+unsigned char light_drgree = 1; /**光照等级 */
 bit distance_state_show_mode = 0;
 
 float tempture = 0.0;
 unsigned int distance = 0;
+unsigned int distance_pre = 0;
+unsigned int distance_now = 0;
 
 
 unsigned char distance_prg = 30;
-unsigned char temp_prg = 30;
+unsigned char temp_prg = 20;
 unsigned int realy_count = 0; /**继电器吸合次数 */
 
 
@@ -48,16 +53,27 @@ void Sys_Init(void)
     
 }
 
+
 int main()
 {
+    bit first_read = 1;
     unsigned char i;
+    Timer1_Init();
+    Sys_Init();
 
+    tempture = read_tempture(first_read);
+    first_read = 0;
+    
     while(1) {
-        tempture = read_tempture();
-        show_process();
-        for (i=0; i<8; i++) {
-            smg_display(i, Smg_Buf[i], 0);
+        if (sys_ticks % 1000 == 0) {
+            distance_now = us_data();
+            distance = distance_now - distance_pre;
+            distance_pre = distance_now;
         }
+        data_process();
+        show_process();
+        ledrelay_process();
+        key_process();
     }
 }
 
@@ -69,45 +85,102 @@ void show_process(void)
             Smg_Buf[0] = 12;  /*c*/
             Smg_Buf[1] = ((int)tempture) /10;
             Smg_Buf[2] = ((int)tempture) %10;
-            Smg_Buf[6] = 18;  /*n*/
-            
+            Smg_Buf[6] = 18;  /*n*/  
         break;
 
-        case 1:  /* 运动状态 */
+        case 1:  /* 运动检测状态  显示超声波测量的距离 单位 cm*/
             Smg_Buf[0] = 16;  /**L */
             Smg_Buf[1] = 1;
-            Smg_Buf[5] = distance / 100;
-            Smg_Buf[6] = distance % 10 / 10;
-            Smg_Buf[7] = distance % 10;
+            Smg_Buf[2] = 20;
+            Smg_Buf[5] = distance_now / 100;
+            Smg_Buf[6] = distance_now / 10 % 10;
+            Smg_Buf[7] = distance_now % 10;
         break;
 
-        case 2:
+        case 2:  /**温度参数界面 */
+            Smg_Buf[0] = 17;  /**P */
+            Smg_Buf[1] = 12;  /**C */
+            Smg_Buf[2] = 20;
+            Smg_Buf[5] = 20;
+            Smg_Buf[6] = temp_prg / 10;
+            Smg_Buf[7] = temp_prg % 10;
         break;
 
 
         case 3: /**数据统计状态 */
             Smg_Buf[0] = 18; /**n */
             Smg_Buf[1] = 12; /**c */
+            Smg_Buf[2] = 20;
             Smg_Buf[4] = (((realy_count / 1000) == 0) ? 20 : (realy_count / 1000));
-            Smg_Buf[5] = (((realy_count % 1000 / 100) == 0) ? 20 : (realy_count % 1000 / 100));
-            Smg_Buf[6] = 0;
-            Smg_Buf[7] = 0;
+            
+            if (Smg_Buf[4] != 20) {  /**最高位不为0 但第二位为0 例如10xx这种 */
+                Smg_Buf[5] = (((realy_count % 1000 / 100) == 0) ? 0 : (realy_count % 1000 / 100));
+            }else {
+                Smg_Buf[5] = (((realy_count % 1000 / 100) == 0) ? 20 : (realy_count % 1000 / 100));
+            }
+
+            if (Smg_Buf[5] != 20) {  /**20x这种情况 */
+                Smg_Buf[6] = (((realy_count % 100 / 10) == 0) ? 0 : (realy_count % 100 / 10));
+            }else {
+                Smg_Buf[6] = (((realy_count % 100 / 10) == 0) ? 20 : (realy_count % 100 / 10));
+            }
+           
+            if (Smg_Buf[6] != 20) {  
+                Smg_Buf[7] = (((realy_count % 10 ) == 0) ? 0 : (realy_count % 10 ));
+            }else {
+                Smg_Buf[7] = (((realy_count % 10) == 0) ? 20 : (realy_count % 10 ));
+            }
         break;
 
+        case 10:
+            Smg_Buf[0] = 17;  /**P */
+            Smg_Buf[1] = 16;  /**L */
+            Smg_Buf[2] = 20;
+            Smg_Buf[5] = 20;
+            Smg_Buf[6] = distance_prg / 10;
+            Smg_Buf[7] = distance_prg % 10;
+        break;
     }
 }
 
 
 void data_process(void)
 {
-    
+    unsigned char vol_temp;
+
+    if (sys_ticks % 200 != 0) {
+        return;
+    }
+
+    #if 0
+    if (sys_ticks % 100 == 0) {   /**1s内采10次超声波 */
+            distance = us_data();
+            vol_temp = PCF8591_Read(PCF8591_CH1);  /**读光敏电阻 51份为1v*/
+        }
+        if (sys_ticks % 500 == 0) {
+            tempture = read_tempture(0);
+    }
+    #endif
+
+    //distance = us_data();
+    vol_temp = PCF8591_Read(PCF8591_CH1);  /**读光敏电阻 51份为1v*/
+    tempture = read_tempture(0);
+    if (vol_temp  >= 3*51) {
+        light_drgree = 1;
+    } else if (vol_temp >= 2*51 && vol_temp < 3*51) {
+        light_drgree = 2;
+    }else if (vol_temp >= 25 && vol_temp < 2*51){
+        light_drgree = 3;
+    }else {
+        light_drgree = 4;
+    }
 
 }
 
 void key_process(void)
 {
     static unsigned char Key_Val, Key_Down, Key_Up, Key_Old;
-    if(sys_ticks % 10) {  //键盘需要频繁扫描
+    if(sys_ticks % 10) {  
         return; 
     }
     
@@ -119,21 +192,39 @@ void key_process(void)
 	Key_Up = ~Key_Val & (Key_Old ^ Key_Val);
 	Key_Old = Key_Val;
 
-    if (Key_Down == KEY_S4) {
-        show_mode = (++show_mode) % 3;
+    if (Key_Down == KEY_S4) { 
+        if( 10 == show_mode) show_mode = 3;
+        else {
+            show_mode++;
+            if (4 == show_mode) show_mode = 0;
+        }
     }
 
-    if (Key_Down == KEY_S5 ) {
-        
+    if (Key_Down == KEY_S5 ) {  /**进入参数子界面 */
+        if (show_mode == 2) {
+            show_mode = 10; /**进入距离参数界面 */
+            return;
+        }
+        if (show_mode == 10) {
+            show_mode = 2; /**进入温度参数界面 */
+        }
     }
 
 
-    if (Key_Down == KEY_S8) {  //-
-        
+    if (Key_Down == KEY_S8) {  //+
+        if(show_mode == 2) {  //温度参数模式
+            temp_prg = (temp_prg == 80) ? 80 : (temp_prg + 1); 
+        }else if (show_mode == 10) { //距离参数模式
+            distance_prg = (distance_prg == 80) ? 80 : (distance_prg + 5);
+        }
     }
 
-    if (Key_Down == KEY_S9) {  //+
-        
+    if (Key_Down == KEY_S9) {  //-
+        if(show_mode == 2) {  //温度参数模式
+            temp_prg = (temp_prg == 20) ? 20 : (temp_prg - 1); 
+        }else if (show_mode == 10) { //距离参数模式
+            distance_prg = (distance_prg == 20) ? 20 : (distance_prg - 5);
+        }
     }
 }
 
@@ -145,7 +236,75 @@ void key_process(void)
  */
 void ledrelay_process(void)
 {
-   
+    if (distance_now < distance_prg) {  //距离值小于距离参数，全部熄灭
+        Led_Buf[0] = LED_OFF;
+        Led_Buf[1] = LED_OFF;
+        Led_Buf[2] = LED_OFF;
+        Led_Buf[3] = LED_OFF;
+    }else {
+        switch(light_drgree) {
+            case 1:
+                Led_Buf[0] = LED_ON;
+                Led_Buf[1] = LED_OFF;
+                Led_Buf[2] = LED_OFF;
+                Led_Buf[3] = LED_OFF;
+                Led_Buf[4] = LED_OFF;
+                Led_Buf[5] = LED_OFF;
+                Led_Buf[6] = LED_OFF; 
+            break;
+
+            case 2:
+                Led_Buf[0] = LED_ON;
+                Led_Buf[1] = LED_ON;
+                Led_Buf[2] = LED_OFF;
+                Led_Buf[3] = LED_OFF;
+                Led_Buf[4] = LED_OFF;
+                Led_Buf[5] = LED_OFF;
+                Led_Buf[6] = LED_OFF;
+                
+            break;
+
+            case 3:
+                Led_Buf[0] = LED_ON;
+                Led_Buf[1] = LED_ON;
+                Led_Buf[2] = LED_ON;
+                Led_Buf[3] = LED_OFF;
+                Led_Buf[4] = LED_OFF;
+                Led_Buf[5] = LED_OFF;
+                Led_Buf[6] = LED_OFF;
+                
+            break;
+
+            case 4:
+                Led_Buf[0] = LED_ON;
+                Led_Buf[1] = LED_ON;
+                Led_Buf[2] = LED_ON;
+                Led_Buf[3] = LED_ON;
+                Led_Buf[4] = LED_OFF;
+                Led_Buf[5] = LED_OFF;
+                Led_Buf[6] = LED_OFF;
+                
+            break;
+        }
+    }
+
+    if (distance < 5) {
+        Led_Buf[7] = LED_OFF;
+    }else if (distance >=5 && distance <  10){
+        Led_Buf[7] = LED_ON;
+    }else {
+        if (sys_ticks % 1000 == 0) {
+            Led_Buf[7] = !Led_Buf[7];
+        }
+    }
+    
+    /**继电器状态判定 */ 
+    if ((distance_now < distance_prg) && tempture > temp_prg) {
+        relay_ctrl(1);
+        realy_count++;
+    }else {
+        relay_ctrl(0);
+    }
 }
 
 
@@ -160,5 +319,10 @@ void ledrelay_process(void)
  */
 void Timer1_Handler(void) interrupt 3
 {
-    
+    unsigned char i;
+    sys_ticks=(++sys_ticks) % 1000;
+
+    smgpos_index = (++smgpos_index) % 8;
+    smg_display(smgpos_index, Smg_Buf[smgpos_index], Smg_Point[smgpos_index]);
+    led_display(smgpos_index, Led_Buf[smgpos_index]);
 }

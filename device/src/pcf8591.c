@@ -8,7 +8,7 @@
  * 该函数通过I2C总线与PCF8591通信，发送写地址和通道地址，然后切换到读取模式，最后读取指定通道的数据
  * 
  * @param addr 要读取的PCF8591通道地址，滑动变阻器或光敏电阻
- * @return unsigned char 从指定通道读取的8位数据
+ * @return unsigned char 从指定通道读取的8位数据 返回的是数字量
  */
 unsigned char PCF8591_Read(unsigned char addr)
 {

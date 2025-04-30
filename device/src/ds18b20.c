@@ -1,5 +1,6 @@
 
 #include "ds18b20.h"
+#include "delay.h"
 
 
 sbit DQ = P1^4;
@@ -14,8 +15,10 @@ sbit DQ = P1^4;
  */
 void delay_onewrite(unsigned char t)
 {
-    t *= 12;
-    while(t--);
+    unsigned char i = 0;
+    while(t--) {
+        for(i = 0; i<12; i++);
+    }
 }
 
 void write_ds18b20(unsigned char dat)
@@ -41,7 +44,7 @@ unsigned char read_ds18b20(void)
         dat >>= 1;
         DQ = 1;
         if (DQ) {
-            dat |= 0x00;
+            dat |= 0x80;
         }
         delay_onewrite(5);
     }
@@ -87,27 +90,30 @@ bit init_ds18b20(void)
  * 
  * @return float 读取到的温度值，单位为摄氏度。
  */
-float read_tempture(void)
+float read_tempture(bit first_read_flag)
 {
     unsigned char low, high;
 
-    init_ds18b20();
+	init_ds18b20();
     // 发送跳过 ROM 指令，直接对 DS18B20 进行操作
-    write_ds18b20(0xcc);
+	write_ds18b20(0xcc);
     // 发送启动温度转换指令
-    write_ds18b20(0x44);
+	write_ds18b20(0x44);
 
+    if (first_read_flag)
+        Delay800ms();
+	
     // 再次初始化 DS18B20 传感器，准备读取温度数据
-    init_ds18b20();
+	init_ds18b20();
     // 发送跳过 ROM 指令，直接对 DS18B20 进行操作
-    write_ds18b20(0xcc);
+	write_ds18b20(0xcc);
     // 发送读取温度寄存器指令
-    write_ds18b20(0xbe);
+	write_ds18b20(0xbe);
     // 读取温度数据的低 8 位
     low = read_ds18b20();
     // 读取温度数据的高 8 位
     high = read_ds18b20();
 
     // 将高 8 位和低 8 位数据合并，并除以 16.0 转换为实际的温度值
-    return ((high << 8) | low) / 16.0;
+    return (float)((high << 8) | low) / 16.0;
 }

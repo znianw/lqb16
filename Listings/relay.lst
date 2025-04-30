@@ -1,0 +1,59 @@
+C51 COMPILER V9.59.0.0   RELAY                                                             04/30/2025 18:09:04 PAGE 1   
+
+
+C51 COMPILER V9.59.0.0, COMPILATION OF MODULE RELAY
+OBJECT MODULE PLACED IN .\Objects\relay.obj
+COMPILER INVOKED BY: D:\Keil_v5\C51\BIN\C51.EXE device\src\relay.c OPTIMIZE(8,SPEED) BROWSE INCDIR(.\driver\inc;.\device
+                    -\inc) DEBUG OBJECTEXTEND PRINT(.\Listings\relay.lst) OBJECT(.\Objects\relay.obj)
+
+line level    source
+
+   1          #include "relay.h"
+   2          #include "hc573.h"
+   3          
+   4          
+   5          unsigned char temp = 0x00;
+   6          unsigned char temp_old = 0xff;
+   7          
+   8          /**
+   9           * @brief 控制继电器的开关状态
+  10           *
+  11           * 该函数根据传入的 enable 参数控制继电器的打开或关闭。
+  12           * 通过位操作设置继电器状态，并仅在状态改变时更新硬件。
+  13           *
+  14           * @param enable 控制开关，1 表示打开继电器，0 表示关闭继电器
+  15           */
+  16          
+  17          void relay_ctrl(bit enable)
+  18          {
+  19   1          if(enable) {
+  20   2              temp |= 0x10;    //第4位，打开继电器
+  21   2          }
+  22   1              else{
+  23   2              temp &= ~(0x10);
+  24   2          } 
+  25   1              
+  26   1          if(temp != temp_old) {
+  27   2                      P0 = temp;
+  28   2              //调用函数更符合软件开发规范，但是51单片机资源有限，调用函数会增加�
+             -��销，这里直接对P2进行位操作
+  29   2                      //SelectHC573(CS_ULN2003);   
+  30   2              P2 = P2 & 0x1f | 0xa0;
+  31   2                      P2 &= 0x1f;
+  32   2                      temp_old = temp;
+  33   2              }
+  34   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     35    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      2    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

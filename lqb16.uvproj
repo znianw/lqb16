@@ -49,13 +49,13 @@
           <OutputName>lqb16</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>0</CreateHexFile>
+          <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath>.\Listings\</ListingPath>
           <HexFormatSelection>0</HexFormatSelection>
           <Merge32K>0</Merge32K>
-          <CreateBatchFile>0</CreateBatchFile>
+          <CreateBatchFile>1</CreateBatchFile>
           <BeforeCompile>
             <RunUserProg1>0</RunUserProg1>
             <RunUserProg2>0</RunUserProg2>
@@ -233,7 +233,7 @@
               <RCB>
                 <Type>0</Type>
                 <StartAddress>0x0</StartAddress>
-                <Size>0x10000</Size>
+                <Size>0xffff</Size>
               </RCB>
               <RXB>
                 <Type>0</Type>
@@ -385,14 +385,51 @@
         </Group>
         <Group>
           <GroupName>driver</GroupName>
+          <Files>
+            <File>
+              <FileName>delay.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\driver\src\delay.c</FilePath>
+            </File>
+            <File>
+              <FileName>i2c.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\driver\src\i2c.c</FilePath>
+            </File>
+          </Files>
         </Group>
         <Group>
           <GroupName>device</GroupName>
           <Files>
             <File>
+              <FileName>smg.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\device\src\smg.c</FilePath>
+            </File>
+            <File>
               <FileName>key.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\device\src\key.c</FilePath>
+            </File>
+            <File>
+              <FileName>timer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\device\src\timer.c</FilePath>
+            </File>
+            <File>
+              <FileName>hc573.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\device\src\hc573.c</FilePath>
+            </File>
+            <File>
+              <FileName>ds18b20.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\device\src\ds18b20.c</FilePath>
+            </File>
+            <File>
+              <FileName>utralsound.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\device\src\utralsound.c</FilePath>
             </File>
             <File>
               <FileName>led.c</FileName>
@@ -400,9 +437,14 @@
               <FilePath>.\device\src\led.c</FilePath>
             </File>
             <File>
-              <FileName>smg.c</FileName>
+              <FileName>pcf8591.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\device\src\smg.c</FilePath>
+              <FilePath>.\device\src\pcf8591.c</FilePath>
+            </File>
+            <File>
+              <FileName>relay.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\device\src\relay.c</FilePath>
             </File>
           </Files>
         </Group>

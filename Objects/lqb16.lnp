@@ -1,4 +1,15 @@
 ".\Objects\STARTUP.obj",
+".\Objects\delay.obj",
+".\Objects\i2c.obj",
+".\Objects\smg.obj",
+".\Objects\key.obj",
+".\Objects\timer.obj",
+".\Objects\hc573.obj",
+".\Objects\ds18b20.obj",
+".\Objects\utralsound.obj",
+".\Objects\led.obj",
+".\Objects\pcf8591.obj",
+".\Objects\relay.obj",
 ".\Objects\main.obj" 
 TO ".\Objects\lqb16" 
 PRINT(".\Listings\lqb16.m51") RAMSIZE(256) 

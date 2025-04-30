@@ -1,4 +1,4 @@
-C51 COMPILER V9.59.0.0   MAIN                                                              04/28/2025 10:21:23 PAGE 1   
+C51 COMPILER V9.59.0.0   MAIN                                                              04/30/2025 18:09:04 PAGE 1   
 
 
 C51 COMPILER V9.59.0.0, COMPILATION OF MODULE MAIN
@@ -9,22 +9,359 @@ COMPILER INVOKED BY: D:\Keil_v5\C51\BIN\C51.EXE user\main.c OPTIMIZE(8,SPEED) BR
 line level    source
 
    1          #include "STC15F2K60S2.H"
-   2          
-   3          int main()
-   4          {
-   5   1          return 0;
-   6   1      }
+   2          #include "ds18b20.h"
+   3          #include "smg.h"
+   4          #include "pcf8591.h"
+   5          #include "hc573.h"
+   6          #include "key.h"
+   7          #include "led.h"
+   8          #include "relay.h"
+   9          #include "timer.h"
+  10          #include "delay.h"
+  11          #include "utralsound.h"
+  12          
+  13          unsigned char smgpos_index = 0;
+  14          unsigned int sys_ticks = 0;
+  15          
+  16          unsigned char show_mode = 0;   /*0 env_state 1 sport_state 2 temprg_state  3 nc_state  10 距离参数*/
+  17          unsigned char light_drgree = 1; /**光照等级 */
+  18          bit distance_state_show_mode = 0;
+  19          
+  20          float tempture = 0.0;
+  21          unsigned int distance = 0;
+  22          unsigned int distance_pre = 0;
+  23          unsigned int distance_now = 0;
+  24          
+  25          
+  26          unsigned char distance_prg = 30;
+  27          unsigned char temp_prg = 20;
+  28          unsigned int realy_count = 0; /**继电器吸合次数 */
+  29          
+  30          
+  31          /**状态控制数组，下标表示对应的位置，如下标为0表示对应的0号数码管 ,默认均
+             -为关闭状态*/
+  32          /** 不要char Led_Buf[8]={1}直接初始化整个数组为1，测试发现不行 应该是C51不支持？
+             -存疑中*/
+  33          unsigned char Led_Buf[8] = {0, 0, 0,0,0,0,0,0};
+  34          unsigned char Smg_Buf[8] = {20, 20, 20, 20,20, 20, 20, 20};   /**OFF */
+  35          unsigned char Smg_Point[8] = {0, 0, 0,0,0,0,0,0};
+  36          
+  37          
+  38          
+  39          void show_process(void);
+  40          void data_process(void);
+  41          void key_process(void);
+  42          void ledrelay_process(void);
+  43          
+  44          void Sys_Init(void)
+  45          {
+  46   1          P0 = 0xff;
+  47   1          SelectHC573(CS_LED);
+  48   1          P2 &= 0x1F;  //关闭LED
+  49   1          
+  50   1          P0 = 0x00;   //关蜂鸣器，继电器 步进电机
+  51   1          SelectHC573(CS_ULN2003);
+  52   1           P2 &= 0x1F;
+C51 COMPILER V9.59.0.0   MAIN                                                              04/30/2025 18:09:04 PAGE 2   
+
+  53   1          
+  54   1      }
+  55          
+  56          
+  57          int main()
+  58          {
+  59   1          bit first_read = 1;
+  60   1          unsigned char i;
+  61   1          Timer1_Init();
+  62   1          Sys_Init();
+  63   1      
+  64   1          tempture = read_tempture(first_read);
+  65   1          first_read = 0;
+  66   1          
+  67   1          while(1) {
+  68   2              if (sys_ticks % 1000 == 0) {
+  69   3                  distance_now = us_data();
+  70   3                  distance = distance_now - distance_pre;
+  71   3                  distance_pre = distance_now;
+  72   3              }
+  73   2              data_process();
+  74   2              show_process();
+  75   2              ledrelay_process();
+  76   2              key_process();
+  77   2          }
+  78   1      }
+*** WARNING C280 IN LINE 60 OF user\main.c: 'i': unreferenced local variable
+  79          
+  80          
+  81          void show_process(void)
+  82          {
+  83   1          switch(show_mode) {
+  84   2              case 0:  /**0 env_state */
+  85   2                  Smg_Buf[0] = 12;  /*c*/
+  86   2                  Smg_Buf[1] = ((int)tempture) /10;
+  87   2                  Smg_Buf[2] = ((int)tempture) %10;
+  88   2                  Smg_Buf[6] = 18;  /*n*/  
+  89   2              break;
+  90   2      
+  91   2              case 1:  /* 运动检测状态  显示超声波测量的距离 单位 cm*/
+  92   2                  Smg_Buf[0] = 16;  /**L */
+  93   2                  Smg_Buf[1] = 1;
+  94   2                  Smg_Buf[2] = 20;
+  95   2                  Smg_Buf[5] = distance_now / 100;
+  96   2                  Smg_Buf[6] = distance_now / 10 % 10;
+  97   2                  Smg_Buf[7] = distance_now % 10;
+  98   2              break;
+  99   2      
+ 100   2              case 2:  /**温度参数界面 */
+ 101   2                  Smg_Buf[0] = 17;  /**P */
+ 102   2                  Smg_Buf[1] = 12;  /**C */
+ 103   2                  Smg_Buf[2] = 20;
+ 104   2                  Smg_Buf[5] = 20;
+ 105   2                  Smg_Buf[6] = temp_prg / 10;
+ 106   2                  Smg_Buf[7] = temp_prg % 10;
+ 107   2              break;
+ 108   2      
+ 109   2      
+ 110   2              case 3: /**数据统计状态 */
+ 111   2                  Smg_Buf[0] = 18; /**n */
+ 112   2                  Smg_Buf[1] = 12; /**c */
+ 113   2                  Smg_Buf[2] = 20;
+C51 COMPILER V9.59.0.0   MAIN                                                              04/30/2025 18:09:04 PAGE 3   
+
+ 114   2                  Smg_Buf[4] = (((realy_count / 1000) == 0) ? 20 : (realy_count / 1000));
+ 115   2                  
+ 116   2                  if (Smg_Buf[4] != 20) {  /**最高位不为0 但第二位为0 例如10xx这种 */
+ 117   3                      Smg_Buf[5] = (((realy_count % 1000 / 100) == 0) ? 0 : (realy_count % 1000 / 100));
+ 118   3                  }else {
+ 119   3                      Smg_Buf[5] = (((realy_count % 1000 / 100) == 0) ? 20 : (realy_count % 1000 / 100));
+ 120   3                  }
+ 121   2      
+ 122   2                  if (Smg_Buf[5] != 20) {  /**20x这种情况 */
+ 123   3                      Smg_Buf[6] = (((realy_count % 100 / 10) == 0) ? 0 : (realy_count % 100 / 10));
+ 124   3                  }else {
+ 125   3                      Smg_Buf[6] = (((realy_count % 100 / 10) == 0) ? 20 : (realy_count % 100 / 10));
+ 126   3                  }
+ 127   2                 
+ 128   2                  if (Smg_Buf[6] != 20) {  
+ 129   3                      Smg_Buf[7] = (((realy_count % 10 ) == 0) ? 0 : (realy_count % 10 ));
+ 130   3                  }else {
+ 131   3                      Smg_Buf[7] = (((realy_count % 10) == 0) ? 20 : (realy_count % 10 ));
+ 132   3                  }
+ 133   2              break;
+ 134   2      
+ 135   2              case 10:
+ 136   2                  Smg_Buf[0] = 17;  /**P */
+ 137   2                  Smg_Buf[1] = 16;  /**L */
+ 138   2                  Smg_Buf[2] = 20;
+ 139   2                  Smg_Buf[5] = 20;
+ 140   2                  Smg_Buf[6] = distance_prg / 10;
+ 141   2                  Smg_Buf[7] = distance_prg % 10;
+ 142   2              break;
+ 143   2          }
+ 144   1      }
+ 145          
+ 146          
+ 147          void data_process(void)
+ 148          {
+ 149   1          unsigned char vol_temp;
+ 150   1      
+ 151   1          if (sys_ticks % 200 != 0) {
+ 152   2              return;
+ 153   2          }
+ 154   1      
+ 155   1          #if 0
+                  if (sys_ticks % 100 == 0) {   /**1s内采10次超声波 */
+                          distance = us_data();
+                          vol_temp = PCF8591_Read(PCF8591_CH1);  /**读光敏电阻 51份为1v*/
+                      }
+                      if (sys_ticks % 500 == 0) {
+                          tempture = read_tempture(0);
+                  }
+                  #endif
+ 164   1      
+ 165   1          //distance = us_data();
+ 166   1          vol_temp = PCF8591_Read(PCF8591_CH1);  /**读光敏电阻 51份为1v*/
+ 167   1          tempture = read_tempture(0);
+ 168   1          if (vol_temp  >= 3*51) {
+ 169   2              light_drgree = 1;
+ 170   2          } else if (vol_temp >= 2*51 && vol_temp < 3*51) {
+ 171   2              light_drgree = 2;
+ 172   2          }else if (vol_temp >= 25 && vol_temp < 2*51){
+ 173   2              light_drgree = 3;
+ 174   2          }else {
+ 175   2              light_drgree = 4;
+C51 COMPILER V9.59.0.0   MAIN                                                              04/30/2025 18:09:04 PAGE 4   
+
+ 176   2          }
+ 177   1      
+ 178   1      }
+ 179          
+ 180          void key_process(void)
+ 181          {
+ 182   1          static unsigned char Key_Val, Key_Down, Key_Up, Key_Old;
+ 183   1          if(sys_ticks % 10) {  
+ 184   2              return; 
+ 185   2          }
+ 186   1          
+ 187   1          //Key_Val = Key_Matrix_Scan(0);
+ 188   1          Key_Val = Key_Matrix_Scan();
+ 189   1      
+ 190   1          /**官方提供的消抖代码 */
+ 191   1          Key_Down = Key_Val & (Key_Old ^ Key_Val);
+ 192   1              Key_Up = ~Key_Val & (Key_Old ^ Key_Val);
+ 193   1              Key_Old = Key_Val;
+ 194   1      
+ 195   1          if (Key_Down == KEY_S4) { 
+ 196   2              if( 10 == show_mode) show_mode = 3;
+ 197   2              else {
+ 198   3                  show_mode++;
+ 199   3                  if (4 == show_mode) show_mode = 0;
+ 200   3              }
+ 201   2          }
+ 202   1      
+ 203   1          if (Key_Down == KEY_S5 ) {  /**进入参数子界面 */
+ 204   2              if (show_mode == 2) {
+ 205   3                  show_mode = 10; /**进入距离参数界面 */
+ 206   3                  return;
+ 207   3              }
+ 208   2              if (show_mode == 10) {
+ 209   3                  show_mode = 2; /**进入温度参数界面 */
+ 210   3              }
+ 211   2          }
+ 212   1      
+ 213   1      
+ 214   1          if (Key_Down == KEY_S8) {  //+
+ 215   2              if(show_mode == 2) {  //温度参数模式
+ 216   3                  temp_prg = (temp_prg == 80) ? 80 : (temp_prg + 1); 
+ 217   3              }else if (show_mode == 10) { //距离参数模式
+ 218   3                  distance_prg = (distance_prg == 80) ? 80 : (distance_prg + 5);
+ 219   3              }
+ 220   2          }
+ 221   1      
+ 222   1          if (Key_Down == KEY_S9) {  //-
+ 223   2              if(show_mode == 2) {  //温度参数模式
+ 224   3                  temp_prg = (temp_prg == 20) ? 20 : (temp_prg - 1); 
+ 225   3              }else if (show_mode == 10) { //距离参数模式
+ 226   3                  distance_prg = (distance_prg == 20) ? 20 : (distance_prg - 5);
+ 227   3              }
+ 228   2          }
+ 229   1      }
+ 230          
+ 231          
+ 232          /**
+ 233           * @brief 根据显示模式处理 LED 和继电器的状态
+ 234           *
+ 235           * 该函数根据全局变量 show_mode 的值，对不同的显示模式进行不同的 LED 和继电器
+             -控制操作。
+ 236           */
+C51 COMPILER V9.59.0.0   MAIN                                                              04/30/2025 18:09:04 PAGE 5   
+
+ 237          void ledrelay_process(void)
+ 238          {
+ 239   1          if (distance_now < distance_prg) {  //距离值小于距离参数，全部熄灭
+ 240   2              Led_Buf[0] = LED_OFF;
+ 241   2              Led_Buf[1] = LED_OFF;
+ 242   2              Led_Buf[2] = LED_OFF;
+ 243   2              Led_Buf[3] = LED_OFF;
+ 244   2          }else {
+ 245   2              switch(light_drgree) {
+ 246   3                  case 1:
+ 247   3                      Led_Buf[0] = LED_ON;
+ 248   3                      Led_Buf[1] = LED_OFF;
+ 249   3                      Led_Buf[2] = LED_OFF;
+ 250   3                      Led_Buf[3] = LED_OFF;
+ 251   3                      Led_Buf[4] = LED_OFF;
+ 252   3                      Led_Buf[5] = LED_OFF;
+ 253   3                      Led_Buf[6] = LED_OFF; 
+ 254   3                  break;
+ 255   3      
+ 256   3                  case 2:
+ 257   3                      Led_Buf[0] = LED_ON;
+ 258   3                      Led_Buf[1] = LED_ON;
+ 259   3                      Led_Buf[2] = LED_OFF;
+ 260   3                      Led_Buf[3] = LED_OFF;
+ 261   3                      Led_Buf[4] = LED_OFF;
+ 262   3                      Led_Buf[5] = LED_OFF;
+ 263   3                      Led_Buf[6] = LED_OFF;
+ 264   3                      
+ 265   3                  break;
+ 266   3      
+ 267   3                  case 3:
+ 268   3                      Led_Buf[0] = LED_ON;
+ 269   3                      Led_Buf[1] = LED_ON;
+ 270   3                      Led_Buf[2] = LED_ON;
+ 271   3                      Led_Buf[3] = LED_OFF;
+ 272   3                      Led_Buf[4] = LED_OFF;
+ 273   3                      Led_Buf[5] = LED_OFF;
+ 274   3                      Led_Buf[6] = LED_OFF;
+ 275   3                      
+ 276   3                  break;
+ 277   3      
+ 278   3                  case 4:
+ 279   3                      Led_Buf[0] = LED_ON;
+ 280   3                      Led_Buf[1] = LED_ON;
+ 281   3                      Led_Buf[2] = LED_ON;
+ 282   3                      Led_Buf[3] = LED_ON;
+ 283   3                      Led_Buf[4] = LED_OFF;
+ 284   3                      Led_Buf[5] = LED_OFF;
+ 285   3                      Led_Buf[6] = LED_OFF;
+ 286   3                      
+ 287   3                  break;
+ 288   3              }
+ 289   2          }
+ 290   1      
+ 291   1          if (distance < 5) {
+ 292   2              Led_Buf[7] = LED_OFF;
+ 293   2          }else if (distance >=5 && distance <  10){
+ 294   2              Led_Buf[7] = LED_ON;
+ 295   2          }else {
+ 296   2              if (sys_ticks % 1000 == 0) {
+ 297   3                  Led_Buf[7] = !Led_Buf[7];
+ 298   3              }
+C51 COMPILER V9.59.0.0   MAIN                                                              04/30/2025 18:09:04 PAGE 6   
+
+ 299   2          }
+ 300   1          
+ 301   1          /**继电器状态判定 */ 
+ 302   1          if ((distance_now < distance_prg) && tempture > temp_prg) {
+ 303   2              relay_ctrl(1);
+ 304   2              realy_count++;
+ 305   2          }else {
+ 306   2              relay_ctrl(0);
+ 307   2          }
+ 308   1      }
+ 309          
+ 310          
+ 311          /**
+ 312           * @brief 定时器1中断服务函数
+ 313           *
+ 314           * 该函数在定时器1产生中断时被调用，用于处理系统的定时任务，
+ 315           * 包括更新系统时钟滴答、数码管显示、LED显示和继电器控制等。
+ 316           *
+ 317           * @param 无
+ 318           * @return 无
+ 319           */
+ 320          void Timer1_Handler(void) interrupt 3
+ 321          {
+ 322   1          unsigned char i;
+ 323   1          sys_ticks=(++sys_ticks) % 1000;
+ 324   1      
+ 325   1          smgpos_index = (++smgpos_index) % 8;
+ 326   1          smg_display(smgpos_index, Smg_Buf[smgpos_index], Smg_Point[smgpos_index]);
+ 327   1          led_display(smgpos_index, Led_Buf[smgpos_index]);
+ 328   1      }
+*** WARNING C280 IN LINE 322 OF user\main.c: 'i': unreferenced local variable
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =      4    ----
+   CODE SIZE        =   1163    ----
    CONSTANT SIZE    =   ----    ----
    XDATA SIZE       =   ----    ----
    PDATA SIZE       =   ----    ----
-   DATA SIZE        =   ----    ----
+   DATA SIZE        =     47       3
    IDATA SIZE       =   ----    ----
-   BIT SIZE         =   ----    ----
+   BIT SIZE         =      1       1
 END OF MODULE INFORMATION.
 
 
-C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
+C51 COMPILATION COMPLETE.  2 WARNING(S),  0 ERROR(S)

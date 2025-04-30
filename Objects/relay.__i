@@ -1,0 +1,1 @@
+"device\src\relay.c" OPTIMIZE (8,SPEED) BROWSE INCDIR(.\driver\inc;.\device\inc) DEBUG OBJECTEXTEND PRINT(.\Listings\relay.lst) OBJECT(.\Objects\relay.obj)

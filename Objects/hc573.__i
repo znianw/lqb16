@@ -1,0 +1,1 @@
+"device\src\hc573.c" OPTIMIZE (8,SPEED) BROWSE INCDIR(.\driver\inc;.\device\inc) DEBUG OBJECTEXTEND PRINT(.\Listings\hc573.lst) OBJECT(.\Objects\hc573.obj)

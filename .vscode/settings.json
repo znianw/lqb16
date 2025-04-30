@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "timer.h": "c",
-        "stc15f2k60s2.h": "c"
+        "stc15f2k60s2.h": "c",
+        "ds18b20.h": "c",
+        "led.h": "c"
     }
 }

@@ -1,0 +1,1 @@
+"device\src\utralsound.c" OPTIMIZE (8,SPEED) BROWSE INCDIR(.\driver\inc;.\device\inc) DEBUG OBJECTEXTEND PRINT(.\Listings\utralsound.lst) OBJECT(.\Objects\utralsound.obj)
