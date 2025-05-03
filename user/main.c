@@ -9,6 +9,7 @@
 #include "timer.h"
 #include "delay.h"
 #include "utralsound.h"
+#include "intrins.h"
 
 unsigned char smgpos_index = 0;
 unsigned int sys_ticks = 0;
@@ -18,17 +19,29 @@ unsigned char light_drgree = 1; /**光照等级 */
 bit distance_state_show_mode = 0;
 
 float tempture = 0.0;
-unsigned int distance = 0;
+unsigned int distance = 0;    /**两次距离之差 */
 unsigned int distance_pre = 0;
 unsigned int distance_now = 0;
-unsigned char sport_state = 1;
-unsigned char sport_state_pre = 1;
 
 
 unsigned char distance_prg = 30;
 unsigned char temp_prg = 20;
 unsigned int realy_count = 0; /**继电器吸合次数 */
 
+/**上电2s距离锁定变量 */
+bit distancelock = 0;
+unsigned int time2s = 0;
+
+/**双按键2s变量 */
+bit scan_flag = 0;
+unsigned int times2000 = 0;
+
+/**运动模式锁定变量 */
+bit sport_statelock = 0;  /**0 未锁定  1 锁定 */
+unsigned int time3s = 0;
+bit near_flag = 0;  /**接近标志位 0不接近 1接近 */
+unsigned char sport_state = 1;   /**当前运动模式 */
+unsigned char sport_state_pre = 0;  /**上次运动模式 */
 
 /**状态控制数组，下标表示对应的位置，如下标为0表示对应的0号数码管 ,默认均为关闭状态*/
 /** 不要char Led_Buf[8]={1}直接初始化整个数组为1，测试发现不行 应该是C51不支持？存疑中*/
@@ -42,6 +55,7 @@ void show_process(void);
 void data_process(void);
 void key_process(void);
 void ledrelay_process(void);
+void utralsound_process(void);
 
 void Sys_Init(void)
 {
@@ -59,7 +73,6 @@ void Sys_Init(void)
 int main()
 {
     bit first_read = 1;
-    unsigned char i;
     Timer1_Init();
     Sys_Init();
 
@@ -67,15 +80,38 @@ int main()
     first_read = 0;
     
     while(1) {
-        if (sys_ticks % 1000 == 0) {
-            distance_now = us_data();
-            distance = distance_now - distance_pre;
-            distance_pre = distance_now;
-        }
+        utralsound_process();
         data_process();
         show_process();
         ledrelay_process();
         key_process();
+    }
+}
+
+void utralsound_process(void)
+{
+    if (distancelock == 0) return;   //上电2s不采集数据
+
+    if (sys_ticks == 0)  { /**systick的周期是1000ms，保证1s采集一次 */
+        distance_now = us_data();
+        near_flag = (distance_now < distance_prg);   //接近判断
+        if (sport_statelock == 0) {  //未锁定
+            distance = distance_now - distance_pre;
+            distance_pre = distance_now;
+
+            if (distance < 5) {
+                sport_state = 1;  //静止
+            }else if (distance < 10){
+                sport_state = 2;  //L2 徘徊
+            }else {
+                sport_state = 3;  //L3 跑动
+            }
+
+            if (sport_state_pre != sport_state) {   //运动状态发生变化
+                sport_statelock = 1;
+            }
+            sport_state_pre = sport_state;
+        }
     }
 }
 
@@ -192,9 +228,7 @@ void data_process(void)
 void key_process(void)
 {
     static unsigned char Key_Val, Key_Down, Key_Up, Key_Old;
-    static unsigned int systick_current = 0;
-    static unsigned int systick_pre = 0;
-    if(sys_ticks % 10) {  
+    if(sys_ticks % 50) {  
         return; 
     }
     
@@ -207,7 +241,7 @@ void key_process(void)
 	Key_Old = Key_Val;
 
     if (Key_Down == KEY_S4) { 
-        if( 10 == show_mode) show_mode = 3;
+        if( 10 == show_mode) show_mode = 3; 
         else {
             show_mode++;
             if (4 == show_mode) show_mode = 0;
@@ -241,17 +275,20 @@ void key_process(void)
         }
     }
 
-    if (Key_Down == 89)  {
-        if (show_mode == 3) {
-            systick_current = sys_ticks;  //记录当前ticks
-            if (systick_current - systick_pre >= 2000 || (3000 - systick_pre) + systick_current >=2000) {
-                realy_count = 0;
-            }
-            systick_pre = systick_current;
-        }
+    if (Key_Down == 89 && show_mode == 3) {
+		scan_flag = 1;
     }
+    if (times2000 == 2001) {
+        realy_count = 0;
+        scan_flag = 0;
+        times2000 = 0;
+    }
+    if(Key_Up == 89 ) {
+        scan_flag = 0;
+        times2000 = 0;
+    }
+    
 }
-
 
 /**
  * @brief 根据显示模式处理 LED 和继电器的状态
@@ -261,21 +298,13 @@ void key_process(void)
 void ledrelay_process(void)
 {
     static bit relay_flag = 1; /**继电器吸合标志位 */
-    if (distance_now < distance_prg) {  //距离值小于距离参数，全部熄灭
-        Led_Buf[0] = LED_OFF;
-        Led_Buf[1] = LED_OFF;
-        Led_Buf[2] = LED_OFF;
-        Led_Buf[3] = LED_OFF;
-    }else {
-        switch(light_drgree) {
+    if (near_flag) {  
+        switch(light_drgree) {  //接近才判断
             case 1:
                 Led_Buf[0] = LED_ON;
                 Led_Buf[1] = LED_OFF;
                 Led_Buf[2] = LED_OFF;
                 Led_Buf[3] = LED_OFF;
-                Led_Buf[4] = LED_OFF;
-                Led_Buf[5] = LED_OFF;
-                Led_Buf[6] = LED_OFF; 
             break;
 
             case 2:
@@ -283,10 +312,6 @@ void ledrelay_process(void)
                 Led_Buf[1] = LED_ON;
                 Led_Buf[2] = LED_OFF;
                 Led_Buf[3] = LED_OFF;
-                Led_Buf[4] = LED_OFF;
-                Led_Buf[5] = LED_OFF;
-                Led_Buf[6] = LED_OFF;
-                
             break;
 
             case 3:
@@ -294,43 +319,31 @@ void ledrelay_process(void)
                 Led_Buf[1] = LED_ON;
                 Led_Buf[2] = LED_ON;
                 Led_Buf[3] = LED_OFF;
-                Led_Buf[4] = LED_OFF;
-                Led_Buf[5] = LED_OFF;
-                Led_Buf[6] = LED_OFF;
-                
             break;
 
             case 4:
                 Led_Buf[0] = LED_ON;
                 Led_Buf[1] = LED_ON;
                 Led_Buf[2] = LED_ON;
-                Led_Buf[3] = LED_ON;
-                Led_Buf[4] = LED_OFF;
-                Led_Buf[5] = LED_OFF;
-                Led_Buf[6] = LED_OFF;
-                
+                Led_Buf[3] = LED_ON; 
             break;
         }
+    }else {
+        Led_Buf[0] = Led_Buf[1] = Led_Buf[2]= Led_Buf[3] = 0;
     }
 
-    if (distance < 5) {
+    if (sport_state == 1) {
         Led_Buf[7] = LED_OFF;
-        sport_state_pre = sport_state;
-        sport_state = 1;
-    }else if (distance >=5 && distance <  10){
+    }else if (sport_state == 2){
         Led_Buf[7] = LED_ON;
-        sport_state_pre = sport_state;
-        sport_state = 2;
     }else {
         if (sys_ticks % 100 == 0) {
             Led_Buf[7] = !Led_Buf[7];
-            sport_state_pre = sport_state;
-            sport_state = 3;
         }
     }
     
     /**继电器状态判定 */ 
-    if ((distance_now < distance_prg) && tempture > temp_prg) {
+    if ((near_flag) && tempture > temp_prg) {
         relay_ctrl(1);
         if (1 == relay_flag) {/**如果继电器本来已经吸合了，不用再加次数 */
             realy_count++;
@@ -354,9 +367,29 @@ void ledrelay_process(void)
  */
 void Timer1_Handler(void) interrupt 3
 {
-    sys_ticks=(++sys_ticks) % 5000;
+    sys_ticks=(++sys_ticks) % 1000;
 
+    if (scan_flag) {    //双键被按下
+        if(++times2000 >= 2000)
+            times2000 = 2001;
+    }
+
+    if (distancelock == 0) {  //上电锁定2s
+        if(++time2s == 2000) {
+            time2s = 0;
+            distancelock = 1;
+        }
+    }
+
+    if (sport_statelock) { //运动模式3s锁定
+        if ((++time3s)  == 3000) {
+            time3s = 0;
+            sport_statelock = 0;
+        }
+    }
     smgpos_index = (++smgpos_index) % 8;
     smg_display(smgpos_index, Smg_Buf[smgpos_index], Smg_Point[smgpos_index]);
     led_display(smgpos_index, Led_Buf[smgpos_index]);
+
+
 }
