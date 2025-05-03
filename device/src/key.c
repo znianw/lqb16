@@ -51,6 +51,9 @@ unsigned char Key_Matrix_Scan(void)
 	if (R4 == 0)
 		temp = KEY_R4C2;
 
+	if (R3 == 0 && R4 == 0)
+		temp = 89;
+
 	C1 = 1;
 	C2 = 1;
 	C3 = 0;

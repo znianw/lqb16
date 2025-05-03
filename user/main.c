@@ -21,6 +21,8 @@ float tempture = 0.0;
 unsigned int distance = 0;
 unsigned int distance_pre = 0;
 unsigned int distance_now = 0;
+unsigned char sport_state = 1;
+unsigned char sport_state_pre = 1;
 
 
 unsigned char distance_prg = 30;
@@ -85,13 +87,19 @@ void show_process(void)
             Smg_Buf[0] = 12;  /*c*/
             Smg_Buf[1] = ((int)tempture) /10;
             Smg_Buf[2] = ((int)tempture) %10;
+            Smg_Buf[3] = 20;
+            Smg_Buf[4] = 20;
+            Smg_Buf[5] = 20;
             Smg_Buf[6] = 18;  /*n*/  
+            Smg_Buf[7] = light_drgree;
         break;
 
         case 1:  /* 运动检测状态  显示超声波测量的距离 单位 cm*/
             Smg_Buf[0] = 16;  /**L */
-            Smg_Buf[1] = 1;
+            Smg_Buf[1] = sport_state;
             Smg_Buf[2] = 20;
+            Smg_Buf[3] = 20;
+            Smg_Buf[4] = 20;
             Smg_Buf[5] = distance_now / 100;
             Smg_Buf[6] = distance_now / 10 % 10;
             Smg_Buf[7] = distance_now % 10;
@@ -101,6 +109,8 @@ void show_process(void)
             Smg_Buf[0] = 17;  /**P */
             Smg_Buf[1] = 12;  /**C */
             Smg_Buf[2] = 20;
+            Smg_Buf[3] = 20;
+            Smg_Buf[4] = 20;
             Smg_Buf[5] = 20;
             Smg_Buf[6] = temp_prg / 10;
             Smg_Buf[7] = temp_prg % 10;
@@ -111,8 +121,8 @@ void show_process(void)
             Smg_Buf[0] = 18; /**n */
             Smg_Buf[1] = 12; /**c */
             Smg_Buf[2] = 20;
+            Smg_Buf[3] = 20;
             Smg_Buf[4] = (((realy_count / 1000) == 0) ? 20 : (realy_count / 1000));
-            
             if (Smg_Buf[4] != 20) {  /**最高位不为0 但第二位为0 例如10xx这种 */
                 Smg_Buf[5] = (((realy_count % 1000 / 100) == 0) ? 0 : (realy_count % 1000 / 100));
             }else {
@@ -136,6 +146,8 @@ void show_process(void)
             Smg_Buf[0] = 17;  /**P */
             Smg_Buf[1] = 16;  /**L */
             Smg_Buf[2] = 20;
+            Smg_Buf[3] = 20;
+            Smg_Buf[4] = 20;
             Smg_Buf[5] = 20;
             Smg_Buf[6] = distance_prg / 10;
             Smg_Buf[7] = distance_prg % 10;
@@ -163,7 +175,7 @@ void data_process(void)
     #endif
 
     //distance = us_data();
-    vol_temp = PCF8591_Read(PCF8591_CH1);  /**读光敏电阻 51份为1v*/
+    vol_temp = 255 - PCF8591_Read(PCF8591_CH1);  /**读光敏电阻 51份为1v*/
     tempture = read_tempture(0);
     if (vol_temp  >= 3*51) {
         light_drgree = 1;
@@ -180,6 +192,8 @@ void data_process(void)
 void key_process(void)
 {
     static unsigned char Key_Val, Key_Down, Key_Up, Key_Old;
+    static unsigned int systick_current = 0;
+    static unsigned int systick_pre = 0;
     if(sys_ticks % 10) {  
         return; 
     }
@@ -226,6 +240,16 @@ void key_process(void)
             distance_prg = (distance_prg == 20) ? 20 : (distance_prg - 5);
         }
     }
+
+    if (Key_Down == 89)  {
+        if (show_mode == 3) {
+            systick_current = sys_ticks;  //记录当前ticks
+            if (systick_current - systick_pre >= 2000 || (3000 - systick_pre) + systick_current >=2000) {
+                realy_count = 0;
+            }
+            systick_pre = systick_current;
+        }
+    }
 }
 
 
@@ -236,6 +260,7 @@ void key_process(void)
  */
 void ledrelay_process(void)
 {
+    static bit relay_flag = 1; /**继电器吸合标志位 */
     if (distance_now < distance_prg) {  //距离值小于距离参数，全部熄灭
         Led_Buf[0] = LED_OFF;
         Led_Buf[1] = LED_OFF;
@@ -290,20 +315,30 @@ void ledrelay_process(void)
 
     if (distance < 5) {
         Led_Buf[7] = LED_OFF;
+        sport_state_pre = sport_state;
+        sport_state = 1;
     }else if (distance >=5 && distance <  10){
         Led_Buf[7] = LED_ON;
+        sport_state_pre = sport_state;
+        sport_state = 2;
     }else {
-        if (sys_ticks % 1000 == 0) {
+        if (sys_ticks % 100 == 0) {
             Led_Buf[7] = !Led_Buf[7];
+            sport_state_pre = sport_state;
+            sport_state = 3;
         }
     }
     
     /**继电器状态判定 */ 
     if ((distance_now < distance_prg) && tempture > temp_prg) {
         relay_ctrl(1);
-        realy_count++;
+        if (1 == relay_flag) {/**如果继电器本来已经吸合了，不用再加次数 */
+            realy_count++;
+            relay_flag = 0;
+        }
     }else {
         relay_ctrl(0);
+        relay_flag = 1;
     }
 }
 
@@ -319,8 +354,7 @@ void ledrelay_process(void)
  */
 void Timer1_Handler(void) interrupt 3
 {
-    unsigned char i;
-    sys_ticks=(++sys_ticks) % 1000;
+    sys_ticks=(++sys_ticks) % 5000;
 
     smgpos_index = (++smgpos_index) % 8;
     smg_display(smgpos_index, Smg_Buf[smgpos_index], Smg_Point[smgpos_index]);
