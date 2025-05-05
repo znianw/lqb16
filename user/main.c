@@ -343,7 +343,7 @@ void ledrelay_process(void)
     }
     
     /**继电器状态判定 */ 
-    if ((near_flag) && tempture > temp_prg) {
+    if ((near_flag) && (tempture > temp_prg)) {
         relay_ctrl(1);
         if (1 == relay_flag) {/**如果继电器本来已经吸合了，不用再加次数 */
             realy_count++;
